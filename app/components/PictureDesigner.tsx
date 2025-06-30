@@ -413,7 +413,7 @@ export default function PictureDesigner() {
     canvas.height = targetHeight;
     
     // Keep display size constant
-    const displayWidth = 400;
+    const displayWidth = 600;
     const displayHeight = Math.round((displayWidth * image.height) / image.width);
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
@@ -653,6 +653,27 @@ export default function PictureDesigner() {
     setPixelatedImage(imageData);
   };
 
+  // Copy image to clipboard
+  const copyToClipboard = async () => {
+    if (!canvasRef.current) return;
+
+    try {
+      const blob = await new Promise<Blob>((resolve) => {
+        canvasRef.current!.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/png');
+      });
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ]);
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+    }
+  };
+
   // Download image
   const downloadImage = () => {
     if (!canvasRef.current) return;
@@ -706,7 +727,7 @@ export default function PictureDesigner() {
         {!image ? (
           <div 
             style={{
-              width: '400px',
+              width: '600px',
               height: '400px',
               border: '3px dashed rgba(255, 255, 255, 0.3)',
               borderRadius: '12px',
@@ -744,7 +765,7 @@ export default function PictureDesigner() {
                 cursor: 'crosshair',
                 border: '2px solid rgba(255, 255, 255, 0.3)',
                 borderRadius: '8px',
-                backgroundColor: '#ffffff'
+                backgroundColor: '#000000'
               }}
             />
           </div>
@@ -871,6 +892,24 @@ export default function PictureDesigner() {
             }}
           >
             Remove Background
+          </button>
+          <button
+            onClick={copyToClipboard}
+            disabled={!pixelatedImage}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: pixelatedImage ? '#4a9eff' : '#333',
+              color: '#fff',
+              cursor: pixelatedImage ? 'pointer' : 'not-allowed',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              opacity: pixelatedImage ? 1 : 0.5
+            }}
+          >
+            Copy to Clipboard
           </button>
           <button
             onClick={downloadImage}
