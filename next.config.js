@@ -2,7 +2,7 @@
 const nextConfig = {
   output: 'export',
   trailingSlash: true,
-  basePath: '/SockDesign',
+  basePath: '/SockDesignAdvanced',
   images: {
     unoptimized: true,
     remotePatterns: [
