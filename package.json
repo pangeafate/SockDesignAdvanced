@@ -1,5 +1,5 @@
 {
-  "name": "sock-design-advanced",
+  "name": "knitting-socks-designer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,17 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next build && next export"
+    "export": "next build"
   },
   "dependencies": {
     "next": "15.3.4",
-    "react": "^18",
-    "react-dom": "^18"
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "file-saver": "^2.0.5"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/file-saver": "^2.0.7",
     "eslint": "^8",
     "eslint-config-next": "15.3.4",
     "typescript": "^5"

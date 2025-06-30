@@ -1,20 +1,15 @@
-# Knitting Socks Designer Advanced
+# Knitting Socks Designer
 
-An enhanced web application for designing patterns and color schemes for knitting socks. This advanced version includes improved pixelization algorithms and clipboard paste functionality.
+A web application for designing patterns and color schemes for knitting socks. This tool allows you to create pixelated designs from images and design custom sock color patterns.
 
-## New Features in Advanced Version
+## Features
 
-### Enhanced Picture Design
-- **Clipboard Paste**: Paste images directly from clipboard using Ctrl+V (Cmd+V on Mac)
-- **Smart Pixelization**: Advanced algorithm that better preserves image details at lower resolutions
-- **Knitting-Optimized Color Quantization**: Improved color reduction specifically designed for knitting patterns
-- **Edge Detection**: Better handling of edges and contrasts for clearer knitting patterns
-
-### Original Features
+### Picture Design
 - **Upload Images**: Drag and drop or click to upload images
-- **Adjustable Pixelation**: Convert images to pixel art with adjustable resolution (8-64px)
+- **Pixelation**: Convert images to pixel art with adjustable resolution (16-128px)
 - **Color Quantization**: Reduce colors to a specified palette (2-16 colors)
 - **Pixel Editing**: Click on individual pixels to change their colors
+- **Color Palette**: View and select from extracted colors
 - **Background Removal**: Remove background colors automatically
 - **PNG Download**: Export your pixelated designs
 
@@ -32,7 +27,7 @@ An enhanced web application for designing patterns and color schemes for knittin
 - **TypeScript**: Type-safe JavaScript
 - **HTML5 Canvas**: For image processing and drawing
 - **CSS3**: Modern styling with gradients and animations
-- **Advanced Algorithms**: K-means clustering, edge detection, smart sampling
+- **File API**: For image upload and download
 
 ## Getting Started
 
@@ -44,8 +39,8 @@ An enhanced web application for designing patterns and color schemes for knittin
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pangeafate/SockDesignAdvanced.git
-cd SockDesignAdvanced
+git clone <repository-url>
+cd knitting-socks-designer
 ```
 
 2. Install dependencies:
@@ -64,15 +59,12 @@ npm run dev
 
 ### Picture Design Mode
 1. Switch to the "Picture Design" tab
-2. Upload an image by:
-   - Clicking or dragging into the upload area
-   - **NEW**: Pasting from clipboard (Ctrl+V / Cmd+V)
-3. Adjust the resolution slider to change pixel size (8-64px)
-4. Modify the max colors slider to control color palette size (2-16 colors)
-5. The advanced algorithm will create a knitting-optimized pattern
-6. Click on individual pixels to edit with selected colors
-7. Use "Remove Background" to make background transparent
-8. Download your design with "Download PNG"
+2. Upload an image by clicking or dragging into the upload area
+3. Adjust the resolution slider to change pixel size
+4. Modify the max colors slider to control color palette size
+5. Click on individual pixels to paint with selected colors
+6. Use "Remove Background" to make background transparent
+7. Download your design with "Download PNG"
 
 ### Sock Color Design Mode
 1. Switch to the "Sock Color Design" tab
@@ -84,46 +76,34 @@ npm run dev
 4. Download your sock design as PNG
 5. Use "Reset Colors" to restore defaults
 
-## Advanced Pixelization Algorithm
+## Development
 
-The enhanced pixelization algorithm includes:
-
-- **Smart Sampling**: Weighted average based on edge detection and contrast
-- **Edge Preservation**: Special handling of edges for clearer pattern definition
-- **Knitting Optimization**: Color selection optimized for knitting visibility
-- **Frequency-Based Clustering**: K-means algorithm that considers color frequency
-- **Contrast Enhancement**: Automatic boosting of high-contrast areas
-
-## Deployment
-
-### GitHub Pages
-This project is configured for GitHub Pages deployment:
-
-```bash
-npm run build
-```
-
-The build will be optimized for static hosting with the correct base paths.
-
-### Local Static Build
-```bash
-npm run build
-npm run start
-```
-
-## Project Structure
-
+### Project Structure
 ```
 ├── app/
 │   ├── components/
-│   │   ├── PictureDesigner.tsx    # Enhanced image processing component
+│   │   ├── PictureDesigner.tsx    # Image processing component
 │   │   └── SockDesigner.tsx       # Sock design component
 │   ├── globals.css                # Global styles
 │   ├── layout.tsx                 # Root layout
 │   └── page.tsx                   # Main page component
 ├── package.json
-├── next.config.js                 # Configured for GitHub Pages
+├── next.config.js
 └── tsconfig.json
+```
+
+### Key Technologies Used
+- **K-means Color Quantization**: Advanced algorithm for reducing image colors
+- **HTML5 Canvas API**: For pixel-level image manipulation
+- **React Hooks**: State management and side effects
+- **CSS Grid & Flexbox**: Responsive layout design
+- **File Download API**: Browser-native file saving
+
+## Building for Production
+
+```bash
+npm run build
+npm start
 ```
 
 ## Contributing
@@ -138,17 +118,10 @@ npm run start
 
 MIT License - feel free to use this project for your knitting adventures!
 
-## Changelog
+## Future Enhancements
 
-### v2.0 (Advanced)
-- Added clipboard paste functionality
-- Implemented advanced pixelization algorithm
-- Enhanced color quantization for knitting
-- Improved edge detection and preservation
-- Better mobile responsiveness
-
-### v1.0 (Original)
-- Basic image upload and pixelization
-- Color quantization with K-means
-- Sock color design tool
-- PNG export functionality 
+- Import/export pattern files
+- More sock templates (crew, ankle, knee-high)
+- Pattern sharing community
+- Mobile app version
+- Integration with knitting calculators 

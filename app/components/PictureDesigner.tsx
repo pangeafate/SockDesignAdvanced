@@ -1,569 +1,486 @@
-'use client'
+'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface Color {
-  r: number
-  g: number
-  b: number
-  a: number
+  r: number;
+  g: number;
+  b: number;
+  a: number;
 }
 
 export default function PictureDesigner() {
-  const [image, setImage] = useState<HTMLImageElement | null>(null)
-  const [pixelSize, setPixelSize] = useState(32)
-  const [maxColors, setMaxColors] = useState(8)
-  const [selectedColor, setSelectedColor] = useState<Color>({ r: 0, g: 0, b: 0, a: 255 })
-  const [colors, setColors] = useState<Color[]>([])
-  const [dragOver, setDragOver] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [resolution, setResolution] = useState(32);
+  const [maxColors, setMaxColors] = useState(8);
+  const [pixelatedImage, setPixelatedImage] = useState<ImageData | null>(null);
+  const [colors, setColors] = useState<string[]>([]);
+  const [selectedColor, setSelectedColor] = useState('#000000');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [editingColorIndex, setEditingColorIndex] = useState<number | null>(null);
   
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const originalCanvasRef = useRef<HTMLCanvasElement>(null)
-  const pixelatedCanvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Enhanced pixelization algorithm for knitting patterns
-  const smartPixelize = useCallback((
-    sourceCanvas: HTMLCanvasElement,
-    targetCanvas: HTMLCanvasElement,
-    pixelSize: number
-  ) => {
-    const sourceCtx = sourceCanvas.getContext('2d')!
-    const targetCtx = targetCanvas.getContext('2d')!
-    
-    const sourceWidth = sourceCanvas.width
-    const sourceHeight = sourceCanvas.height
-    
-    // Calculate target dimensions maintaining aspect ratio
-    const aspectRatio = sourceWidth / sourceHeight
-    const targetWidth = Math.floor(sourceWidth / pixelSize) * pixelSize
-    const targetHeight = Math.floor(targetWidth / aspectRatio / pixelSize) * pixelSize
-    
-    targetCanvas.width = targetWidth
-    targetCanvas.height = targetHeight
-    
-    const sourceData = sourceCtx.getImageData(0, 0, sourceWidth, sourceHeight)
-    const targetData = targetCtx.createImageData(targetWidth, targetHeight)
-    
-    const pixelsPerBlockX = sourceWidth / (targetWidth / pixelSize)
-    const pixelsPerBlockY = sourceHeight / (targetHeight / pixelSize)
-    
-    // Process each pixel block
-    for (let y = 0; y < targetHeight; y += pixelSize) {
-      for (let x = 0; x < targetWidth; x += pixelSize) {
-        // Sample area in source image
-        const sourceX = Math.floor((x / targetWidth) * sourceWidth)
-        const sourceY = Math.floor((y / targetHeight) * sourceHeight)
-        const sourceEndX = Math.min(sourceX + pixelsPerBlockX, sourceWidth)
-        const sourceEndY = Math.min(sourceY + pixelsPerBlockY, sourceHeight)
-        
-        // Enhanced sampling with edge detection and color weighting
-        let totalWeight = 0
-        let weightedR = 0, weightedG = 0, weightedB = 0, weightedA = 0
-        let edgeStrength = 0
-        
-        // First pass: collect color data and detect edges
-        const samples: Color[] = []
-        for (let sy = sourceY; sy < sourceEndY; sy++) {
-          for (let sx = sourceX; sx < sourceEndX; sx++) {
-            const idx = (sy * sourceWidth + sx) * 4
-            if (idx < sourceData.data.length) {
-              const r = sourceData.data[idx]
-              const g = sourceData.data[idx + 1]
-              const b = sourceData.data[idx + 2]
-              const a = sourceData.data[idx + 3]
-              samples.push({ r, g, b, a })
-              
-              // Calculate edge strength using gradient
-              if (sx > sourceX && sy > sourceY) {
-                const prevIdx = ((sy - 1) * sourceWidth + (sx - 1)) * 4
-                const dr = Math.abs(r - sourceData.data[prevIdx])
-                const dg = Math.abs(g - sourceData.data[prevIdx + 1])
-                const db = Math.abs(b - sourceData.data[prevIdx + 2])
-                edgeStrength += (dr + dg + db) / 3
-              }
-            }
-          }
-        }
-        
-        // Second pass: weighted average with edge consideration
-        const avgEdge = edgeStrength / samples.length
-        for (const sample of samples) {
-          // Give more weight to colors that are more common or near edges
-          const luminance = 0.299 * sample.r + 0.587 * sample.g + 0.114 * sample.b
-          const edgeWeight = avgEdge > 30 ? 1.5 : 1.0 // Boost edge pixels
-          const contrastWeight = luminance > 128 ? 1.2 : 0.8 // Prefer higher contrast
-          const weight = edgeWeight * contrastWeight
-          
-          weightedR += sample.r * weight
-          weightedG += sample.g * weight
-          weightedB += sample.b * weight
-          weightedA += sample.a * weight
-          totalWeight += weight
-        }
-        
-        if (totalWeight > 0) {
-          const avgR = Math.round(weightedR / totalWeight)
-          const avgG = Math.round(weightedG / totalWeight)
-          const avgB = Math.round(weightedB / totalWeight)
-          const avgA = Math.round(weightedA / totalWeight)
-          
-          // Fill the pixel block with the calculated color
-          for (let py = y; py < y + pixelSize && py < targetHeight; py++) {
-            for (let px = x; px < x + pixelSize && px < targetWidth; px++) {
-              const idx = (py * targetWidth + px) * 4
-              targetData.data[idx] = avgR
-              targetData.data[idx + 1] = avgG
-              targetData.data[idx + 2] = avgB
-              targetData.data[idx + 3] = avgA
-            }
-          }
-        }
-      }
-    }
-    
-    targetCtx.putImageData(targetData, 0, 0)
-  }, [])
+  // Color distance calculation
+  const colorDistance = (c1: Color, c2: Color): number => {
+    return Math.sqrt(
+      Math.pow(c1.r - c2.r, 2) + 
+      Math.pow(c1.g - c2.g, 2) + 
+      Math.pow(c1.b - c2.b, 2)
+    );
+  };
 
-  // K-means clustering for color quantization optimized for knitting
-  const quantizeColors = useCallback((canvas: HTMLCanvasElement, maxColors: number): Color[] => {
-    const ctx = canvas.getContext('2d')!
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
+  // K-means color quantization
+  const quantizeColors = (imageData: ImageData, k: number): string[] => {
+    const pixels: Color[] = [];
     
-    // Extract unique colors with frequency counting
-    const colorMap = new Map<string, { color: Color; count: number }>()
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      const a = data[i + 3]
-      
-      if (a > 0) { // Skip transparent pixels
-        const key = `${r},${g},${b}`
-        const existing = colorMap.get(key)
-        if (existing) {
-          existing.count++
-        } else {
-          colorMap.set(key, { color: { r, g, b, a }, count: 1 })
-        }
+    // Extract all pixels
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      if (imageData.data[i + 3] > 128) { // Only non-transparent pixels
+        pixels.push({
+          r: imageData.data[i],
+          g: imageData.data[i + 1],
+          b: imageData.data[i + 2],
+          a: imageData.data[i + 3]
+        });
       }
     }
-    
-    let colors = Array.from(colorMap.values())
-      .sort((a, b) => b.count - a.count) // Sort by frequency
-      .map(item => item.color)
-    
-    if (colors.length <= maxColors) {
-      return colors
+
+    if (pixels.length === 0) return [];
+
+    // Initialize centroids randomly
+    const centroids: Color[] = [];
+    for (let i = 0; i < k; i++) {
+      const randomPixel = pixels[Math.floor(Math.random() * pixels.length)];
+      centroids.push({ ...randomPixel });
     }
-    
-    // Enhanced K-means with knitting-specific color selection
-    const centroids: Color[] = []
-    
-    // Select initial centroids focusing on high-frequency and high-contrast colors
-    const sortedByFrequency = Array.from(colorMap.values())
-      .sort((a, b) => b.count - a.count)
-    
-    // Always include the most frequent color
-    centroids.push(sortedByFrequency[0].color)
-    
-    // Add colors with maximum distance from existing centroids
-    for (let i = 1; i < maxColors; i++) {
-      let maxDistance = 0
-      let bestColor = colors[0]
+
+    // K-means iterations
+    for (let iter = 0; iter < 20; iter++) {
+      const clusters: Color[][] = Array(k).fill(null).map(() => []);
       
-      for (const colorEntry of sortedByFrequency) {
-        const color = colorEntry.color
-        let minDistanceToExisting = Infinity
+      // Assign pixels to closest centroid
+      pixels.forEach(pixel => {
+        let minDist = Infinity;
+        let closestCentroid = 0;
         
-        for (const centroid of centroids) {
-          const distance = Math.sqrt(
-            Math.pow(color.r - centroid.r, 2) +
-            Math.pow(color.g - centroid.g, 2) +
-            Math.pow(color.b - centroid.b, 2)
-          )
-          minDistanceToExisting = Math.min(minDistanceToExisting, distance)
-        }
-        
-        if (minDistanceToExisting > maxDistance) {
-          maxDistance = minDistanceToExisting
-          bestColor = color
-        }
-      }
-      
-      centroids.push(bestColor)
-    }
-    
-    // Refine centroids with K-means iterations
-    for (let iteration = 0; iteration < 10; iteration++) {
-      const clusters: Color[][] = centroids.map(() => [])
-      
-      // Assign colors to nearest centroids
-      for (const colorEntry of colorMap.values()) {
-        const color = colorEntry.color
-        let minDistance = Infinity
-        let bestCluster = 0
-        
-        for (let j = 0; j < centroids.length; j++) {
-          const centroid = centroids[j]
-          const distance = Math.sqrt(
-            Math.pow(color.r - centroid.r, 2) +
-            Math.pow(color.g - centroid.g, 2) +
-            Math.pow(color.b - centroid.b, 2)
-          )
-          
-          if (distance < minDistance) {
-            minDistance = distance
-            bestCluster = j
+        centroids.forEach((centroid, i) => {
+          const dist = colorDistance(pixel, centroid);
+          if (dist < minDist) {
+            minDist = dist;
+            closestCentroid = i;
           }
-        }
+        });
         
-        // Add color multiple times based on frequency for better clustering
-        for (let k = 0; k < colorEntry.count; k++) {
-          clusters[bestCluster].push(color)
-        }
-      }
-      
+        clusters[closestCentroid].push(pixel);
+      });
+
       // Update centroids
-      let changed = false
-      for (let j = 0; j < centroids.length; j++) {
-        if (clusters[j].length > 0) {
-          const newR = Math.round(clusters[j].reduce((sum, c) => sum + c.r, 0) / clusters[j].length)
-          const newG = Math.round(clusters[j].reduce((sum, c) => sum + c.g, 0) / clusters[j].length)
-          const newB = Math.round(clusters[j].reduce((sum, c) => sum + c.b, 0) / clusters[j].length)
-          
-          if (newR !== centroids[j].r || newG !== centroids[j].g || newB !== centroids[j].b) {
-            centroids[j] = { r: newR, g: newG, b: newB, a: 255 }
-            changed = true
-          }
+      centroids.forEach((centroid, i) => {
+        if (clusters[i].length > 0) {
+          centroid.r = clusters[i].reduce((sum, p) => sum + p.r, 0) / clusters[i].length;
+          centroid.g = clusters[i].reduce((sum, p) => sum + p.g, 0) / clusters[i].length;
+          centroid.b = clusters[i].reduce((sum, p) => sum + p.b, 0) / clusters[i].length;
         }
-      }
-      
-      if (!changed) break
+      });
     }
-    
-    return centroids
-  }, [])
 
-  // Apply quantized colors to canvas
-  const applyQuantization = useCallback((canvas: HTMLCanvasElement, colors: Color[]) => {
-    const ctx = canvas.getContext('2d')!
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
+    return centroids.map(c => 
+      `#${Math.round(c.r).toString(16).padStart(2, '0')}${Math.round(c.g).toString(16).padStart(2, '0')}${Math.round(c.b).toString(16).padStart(2, '0')}`
+    );
+  };
+
+  // Pixelate and quantize image
+  const processImage = useCallback(() => {
+    if (!image || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Keep canvas display size constant (400px width)
+    const displayWidth = 400;
+    const displayHeight = Math.round((displayWidth * image.height) / image.width);
     
+    // Set actual canvas resolution based on pixel resolution setting
+    canvas.width = resolution;
+    canvas.height = Math.round((resolution * image.height) / image.width);
+    
+    // Set display size via CSS to keep visual size constant
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+
+    // Draw image at low resolution
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Get color palette
+    const palette = quantizeColors(imageData, maxColors);
+    setColors(palette);
+
+    // Apply color quantization
+    const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] > 0) { // Skip transparent pixels
-        const originalColor = { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] }
+      if (data[i + 3] > 128) { // Only non-transparent pixels
+        const pixel: Color = {
+          r: data[i],
+          g: data[i + 1],
+          b: data[i + 2],
+          a: data[i + 3]
+        };
+
+        // Find closest palette color
+        let minDist = Infinity;
+        let closestColor = palette[0];
         
-        // Find closest color
-        let minDistance = Infinity
-        let closestColor = colors[0]
-        
-        for (const color of colors) {
-          const distance = Math.sqrt(
-            Math.pow(originalColor.r - color.r, 2) +
-            Math.pow(originalColor.g - color.g, 2) +
-            Math.pow(originalColor.b - color.b, 2)
-          )
+        palette.forEach(colorHex => {
+          const color: Color = {
+            r: parseInt(colorHex.slice(1, 3), 16),
+            g: parseInt(colorHex.slice(3, 5), 16),
+            b: parseInt(colorHex.slice(5, 7), 16),
+            a: 255
+          };
           
-          if (distance < minDistance) {
-            minDistance = distance
-            closestColor = color
+          const dist = colorDistance(pixel, color);
+          if (dist < minDist) {
+            minDist = dist;
+            closestColor = colorHex;
           }
-        }
+        });
+
+        // Apply closest color
+        const r = parseInt(closestColor.slice(1, 3), 16);
+        const g = parseInt(closestColor.slice(3, 5), 16);
+        const b = parseInt(closestColor.slice(5, 7), 16);
         
-        data[i] = closestColor.r
-        data[i + 1] = closestColor.g
-        data[i + 2] = closestColor.b
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
       }
     }
-    
-    ctx.putImageData(imageData, 0, 0)
-  }, [])
 
-  // Process image with enhanced algorithms
-  const processImage = useCallback(async (img: HTMLImageElement) => {
-    setIsProcessing(true)
-    
-    if (originalCanvasRef.current && pixelatedCanvasRef.current) {
-      const originalCanvas = originalCanvasRef.current
-      const pixelatedCanvas = pixelatedCanvasRef.current
-      const originalCtx = originalCanvas.getContext('2d')!
-      
-      // Set original canvas size
-      originalCanvas.width = img.width
-      originalCanvas.height = img.height
-      originalCtx.drawImage(img, 0, 0)
-      
-      // Apply smart pixelization
-      smartPixelize(originalCanvas, pixelatedCanvas, pixelSize)
-      
-      // Extract and quantize colors
-      const extractedColors = quantizeColors(pixelatedCanvas, maxColors)
-      setColors(extractedColors)
-      
-      // Apply quantization
-      applyQuantization(pixelatedCanvas, extractedColors)
-      
-      if (extractedColors.length > 0) {
-        setSelectedColor(extractedColors[0])
-      }
-    }
-    
-    setIsProcessing(false)
-  }, [pixelSize, maxColors, smartPixelize, quantizeColors, applyQuantization])
-
-  // Handle clipboard paste
-  useEffect(() => {
-    const handlePaste = async (event: ClipboardEvent) => {
-      const items = event.clipboardData?.items
-      if (!items) return
-      
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          event.preventDefault()
-          const file = item.getAsFile()
-          if (file) {
-            const img = new Image()
-            img.onload = () => {
-              setImage(img)
-              processImage(img)
-            }
-            img.src = URL.createObjectURL(file)
-          }
-          break
-        }
-      }
-    }
-    
-    document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
-  }, [processImage])
+    ctx.putImageData(imageData, 0, 0);
+    setPixelatedImage(imageData);
+  }, [image, resolution, maxColors]);
 
   // Handle file upload
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const img = new Image()
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
       img.onload = () => {
-        setImage(img)
-        processImage(img)
-      }
-      img.src = URL.createObjectURL(file)
-    }
-  }
+        setImage(img);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Handle drag and drop
-  const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDragOver(true)
-  }
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
 
-  const handleDragLeave = () => {
-    setDragOver(false)
-  }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => setImage(img);
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDragOver(false)
+  // Handle canvas painting
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !pixelatedImage) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     
-    const files = event.dataTransfer.files
-    if (files.length > 0) {
-      const file = files[0]
-      if (file.type.startsWith('image/')) {
-        const img = new Image()
-        img.onload = () => {
-          setImage(img)
-          processImage(img)
+    const x = Math.floor((e.clientX - rect.left) * scaleX);
+    const y = Math.floor((e.clientY - rect.top) * scaleY);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Get current image data
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Convert hex color to RGB
+    const r = parseInt(selectedColor.slice(1, 3), 16);
+    const g = parseInt(selectedColor.slice(3, 5), 16);
+    const b = parseInt(selectedColor.slice(5, 7), 16);
+
+    // Update the pixel in the image data
+    const pixelIndex = (y * canvas.width + x) * 4;
+    data[pixelIndex] = r;
+    data[pixelIndex + 1] = g;
+    data[pixelIndex + 2] = b;
+    data[pixelIndex + 3] = 255; // Full opacity
+
+    // Put the updated image data back
+    ctx.putImageData(imageData, 0, 0);
+
+    // Update stored image data
+    setPixelatedImage(imageData);
+  };
+
+  // Remove background (make transparent)
+  const removeBackground = () => {
+    if (!canvasRef.current || !pixelatedImage) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Get corner colors as background colors
+    const backgroundColors = [
+      [data[0], data[1], data[2]], // Top-left
+      [data[(canvas.width - 1) * 4], data[(canvas.width - 1) * 4 + 1], data[(canvas.width - 1) * 4 + 2]], // Top-right
+      [data[(canvas.height - 1) * canvas.width * 4], data[(canvas.height - 1) * canvas.width * 4 + 1], data[(canvas.height - 1) * canvas.width * 4 + 2]], // Bottom-left
+    ];
+
+    // Make similar colors transparent
+    for (let i = 0; i < data.length; i += 4) {
+      const pixel = [data[i], data[i + 1], data[i + 2]];
+      
+      for (const bgColor of backgroundColors) {
+        const distance = Math.sqrt(
+          Math.pow(pixel[0] - bgColor[0], 2) +
+          Math.pow(pixel[1] - bgColor[1], 2) +
+          Math.pow(pixel[2] - bgColor[2], 2)
+        );
+        
+        if (distance < 50) { // Threshold for background detection
+          data[i + 3] = 0; // Make transparent
+          break;
         }
-        img.src = URL.createObjectURL(file)
       }
     }
-  }
 
-  // Re-process when parameters change
-  useEffect(() => {
-    if (image) {
-      processImage(image)
+    ctx.putImageData(imageData, 0, 0);
+    setPixelatedImage(imageData);
+  };
+
+  // Update a color in the palette and reprocess image
+  const updatePaletteColor = (index: number, newColor: string) => {
+    const updatedColors = [...colors];
+    const oldColor = updatedColors[index];
+    updatedColors[index] = newColor;
+    setColors(updatedColors);
+
+    // Update all pixels with the old color to the new color
+    if (!canvasRef.current || !pixelatedImage) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Convert old and new colors to RGB
+    const oldRgb = {
+      r: parseInt(oldColor.slice(1, 3), 16),
+      g: parseInt(oldColor.slice(3, 5), 16),
+      b: parseInt(oldColor.slice(5, 7), 16)
+    };
+    const newRgb = {
+      r: parseInt(newColor.slice(1, 3), 16),
+      g: parseInt(newColor.slice(3, 5), 16),
+      b: parseInt(newColor.slice(5, 7), 16)
+    };
+
+    // Replace all instances of old color with new color
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] === oldRgb.r && data[i + 1] === oldRgb.g && data[i + 2] === oldRgb.b) {
+        data[i] = newRgb.r;
+        data[i + 1] = newRgb.g;
+        data[i + 2] = newRgb.b;
+      }
     }
-  }, [image, pixelSize, maxColors, processImage])
 
-  // Handle pixel editing
-  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!pixelatedCanvasRef.current) return
-    
-    const canvas = pixelatedCanvasRef.current
-    const rect = canvas.getBoundingClientRect()
-    const x = Math.floor((event.clientX - rect.left) * (canvas.width / rect.width))
-    const y = Math.floor((event.clientY - rect.top) * (canvas.height / rect.height))
-    
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a / 255})`
-    
-    // Find the pixel block size and fill the entire block
-    const blockSize = Math.floor(canvas.width / (canvas.width / pixelSize))
-    const blockX = Math.floor(x / blockSize) * blockSize
-    const blockY = Math.floor(y / blockSize) * blockSize
-    
-    ctx.fillRect(blockX, blockY, blockSize, blockSize)
-  }
+    ctx.putImageData(imageData, 0, 0);
+    setPixelatedImage(imageData);
+  };
 
   // Download image
   const downloadImage = () => {
-    if (pixelatedCanvasRef.current) {
-      const link = document.createElement('a')
-      link.download = 'knitting-pattern.png'
-      link.href = pixelatedCanvasRef.current.toDataURL()
-      link.click()
-    }
-  }
+    if (!canvasRef.current) return;
 
-  // Remove background
-  const removeBackground = () => {
-    if (!pixelatedCanvasRef.current) return
+    const link = document.createElement('a');
+    link.download = 'pixelated-design.png';
+    link.href = canvasRef.current.toDataURL();
+    link.click();
+  };
+
+  // Reset component to initial state
+  const resetComponent = () => {
+    setImage(null);
+    setResolution(32);
+    setMaxColors(8);
+    setPixelatedImage(null);
+    setColors([]);
+    setSelectedColor('#000000');
+    setIsDrawing(false);
+    setEditingColorIndex(null);
     
-    const canvas = pixelatedCanvasRef.current
-    const ctx = canvas.getContext('2d')!
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
-    
-    // Get corner color as background
-    const bgColor = { r: data[0], g: data[1], b: data[2] }
-    const threshold = 30
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      
-      const distance = Math.sqrt(
-        Math.pow(r - bgColor.r, 2) +
-        Math.pow(g - bgColor.g, 2) +
-        Math.pow(b - bgColor.b, 2)
-      )
-      
-      if (distance < threshold) {
-        data[i + 3] = 0 // Make transparent
+    // Clear canvas
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
     }
-    
-    ctx.putImageData(imageData, 0, 0)
-  }
+  };
+
+  // Process image when parameters change
+  useEffect(() => {
+    if (image) {
+      processImage();
+    }
+  }, [image, processImage]);
 
   return (
-    <div>
-      <div className={`upload-area ${dragOver ? 'drag-over' : ''} ${image ? 'has-image' : ''}`}
-           onDragOver={handleDragOver}
-           onDragLeave={handleDragLeave}
-           onDrop={handleDrop}
-           onClick={() => fileInputRef.current?.click()}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileUpload}
-          style={{ display: 'none' }}
-        />
-        {image ? (
-          <div>
-            <p>✓ Image loaded - Ready for processing</p>
-            <p className="paste-hint">Drop another image, click to browse, or paste from clipboard (Ctrl+V)</p>
+    <div className="main-content">
+      <div className={`canvas-area ${image ? 'has-content' : ''}`}>
+        {!image ? (
+          <div 
+            className="upload-area"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <p>Click to upload or drag and drop an image</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="file-input"
+            />
           </div>
         ) : (
-          <div>
-            <p>📸 Drop an image here, click to browse, or paste from clipboard (Ctrl+V)</p>
-            <p className="paste-hint">Supports all common image formats</p>
+          <div className="canvas-container">
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              style={{ 
+                imageRendering: 'pixelated',
+                cursor: 'crosshair',
+                border: '2px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '8px'
+              }}
+            />
           </div>
         )}
       </div>
 
-      <div className="controls">
+      <div className="controls-panel">
         <div className="control-group">
-          <h4>Pixelization</h4>
-          <div className="slider-container">
-            <label htmlFor="pixelSize">Pixel Size: {pixelSize}px</label>
+          <h3>Resolution</h3>
+          <div className="slider">
             <input
-              id="pixelSize"
               type="range"
-              min="8"
-              max="64"
-              value={pixelSize}
-              onChange={(e) => setPixelSize(parseInt(e.target.value))}
-              className="slider"
+              min="16"
+              max="128"
+              value={resolution}
+              onChange={(e) => setResolution(Number(e.target.value))}
             />
+            <span>{resolution}px</span>
           </div>
-          <div className="slider-container">
-            <label htmlFor="maxColors">Max Colors: {maxColors}</label>
+        </div>
+
+        <div className="control-group">
+          <h3>Max Colors</h3>
+          <div className="slider">
             <input
-              id="maxColors"
               type="range"
               min="2"
               max="16"
               value={maxColors}
-              onChange={(e) => setMaxColors(parseInt(e.target.value))}
-              className="slider"
+              onChange={(e) => setMaxColors(Number(e.target.value))}
             />
+            <span>{maxColors} colors</span>
           </div>
         </div>
 
-        <div className="control-group">
-          <h4>Actions</h4>
-          <div className="buttons">
-            <button onClick={removeBackground} className="btn btn-secondary" disabled={!image}>
-              Remove Background
-            </button>
-            <button onClick={downloadImage} className="btn btn-success" disabled={!image}>
-              Download PNG
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {isProcessing && (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#667eea' }}>
-          <p>🧶 Processing image with enhanced knitting algorithm...</p>
-        </div>
-      )}
-
-      {image && (
-        <>
-          <div className="canvas-container">
-            <div className="canvas-wrapper">
-              <h4>Original</h4>
-              <canvas
-                ref={originalCanvasRef}
-                style={{ maxWidth: '300px', maxHeight: '300px' }}
-              />
-            </div>
-            <div className="canvas-wrapper">
-              <h4>Knitting Pattern</h4>
-              <canvas
-                ref={pixelatedCanvasRef}
-                onClick={handleCanvasClick}
-                style={{ maxWidth: '300px', maxHeight: '300px' }}
-              />
-            </div>
-          </div>
-
-          {colors.length > 0 && (
-            <div className="color-palette">
+        {colors.length > 0 && (
+          <div className="control-group">
+            <h3>Color Palette</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '10px' }}>
               {colors.map((color, index) => (
-                <div
-                  key={index}
-                  className={`color-swatch ${selectedColor === color ? 'selected' : ''}`}
-                  style={{
-                    backgroundColor: `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a / 255})`
-                  }}
-                  onClick={() => setSelectedColor(color)}
-                  title={`RGB(${color.r}, ${color.g}, ${color.b})`}
-                />
+                <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                  <div
+                    className={`color-swatch ${selectedColor === color ? 'selected' : ''}`}
+                    style={{ 
+                      backgroundColor: color,
+                      position: 'relative',
+                      width: '40px',
+                      height: '40px'
+                    }}
+                    onClick={() => setSelectedColor(color)}
+                  />
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => updatePaletteColor(index, e.target.value)}
+                    style={{ 
+                      width: '40px', 
+                      height: '20px', 
+                      border: 'none', 
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                    title={`Edit color`}
+                  />
+                </div>
               ))}
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
+
+        <div className="control-group">
+          <h3>Actions</h3>
+          <button
+            className="button"
+            onClick={removeBackground}
+            disabled={!pixelatedImage}
+          >
+            Remove Background
+          </button>
+          <button
+            className="button"
+            onClick={downloadImage}
+            disabled={!pixelatedImage}
+          >
+            Download PNG
+          </button>
+          <button
+            className="button"
+            onClick={resetComponent}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
     </div>
-  )
+  );
 } 

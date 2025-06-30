@@ -1,9 +1,9 @@
-import React from 'react'
+import type { Metadata } from 'next'
 import './globals.css'
 
-export const metadata = {
-  title: 'Knitting Socks Designer Advanced',
-  description: 'Advanced web application for designing patterns and color schemes for knitting socks',
+export const metadata: Metadata = {
+  title: 'Knitting Socks Designer',
+  description: 'Design patterns and colors for your knitting socks',
 }
 
 export default function RootLayout({
