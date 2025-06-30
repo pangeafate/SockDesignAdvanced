@@ -534,7 +534,7 @@ export default function PictureDesigner() {
   }, [handlePaste]);
 
   // Handle canvas painting
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const paintPixel = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !pixelatedImage) return;
 
     const canvas = canvasRef.current;
@@ -544,6 +544,9 @@ export default function PictureDesigner() {
     
     const x = Math.floor((e.clientX - rect.left) * scaleX);
     const y = Math.floor((e.clientY - rect.top) * scaleY);
+
+    // Check bounds
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -569,6 +572,25 @@ export default function PictureDesigner() {
 
     // Update stored image data
     setPixelatedImage(imageData);
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setIsDrawing(true);
+    paintPixel(e);
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDrawing) {
+      paintPixel(e);
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsDrawing(false);
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setIsDrawing(false);
   };
 
   // Remove background (make transparent)
@@ -759,7 +781,10 @@ export default function PictureDesigner() {
           <div style={{ textAlign: 'center' }}>
             <canvas
               ref={canvasRef}
-              onClick={handleCanvasClick}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseLeave}
               style={{ 
                 imageRendering: 'pixelated',
                 cursor: 'crosshair',
@@ -888,8 +913,12 @@ export default function PictureDesigner() {
               fontSize: '14px',
               fontWeight: '500',
               transition: 'all 0.2s ease',
-              opacity: pixelatedImage ? 1 : 0.5
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
             }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Remove Background
           </button>
