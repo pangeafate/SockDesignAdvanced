@@ -201,6 +201,37 @@ export default function PictureDesigner() {
     }
   };
 
+  // Handle clipboard paste
+  const handlePaste = useCallback((e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => setImage(img);
+            img.src = event.target?.result as string;
+          };
+          reader.readAsDataURL(file);
+        }
+        break;
+      }
+    }
+  }, []);
+
+  // Set up clipboard paste listener
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [handlePaste]);
+
   // Handle canvas painting
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !pixelatedImage) return;
@@ -368,7 +399,7 @@ export default function PictureDesigner() {
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
           >
-            <p>Click to upload or drag and drop an image</p>
+            <p>Click to upload, drag and drop, or paste an image (Ctrl+V)</p>
             <input
               ref={fileInputRef}
               type="file"
