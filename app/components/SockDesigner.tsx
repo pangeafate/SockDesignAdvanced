@@ -433,6 +433,27 @@ useEffect(() => {
     currentColors.current = updatedColors;
   };
 
+  // Copy image to clipboard
+  const copyToClipboard = async () => {
+    if (!canvasRef.current) return;
+
+    try {
+      const blob = await new Promise<Blob>((resolve) => {
+        canvasRef.current!.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/png');
+      });
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ]);
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+    }
+  };
+
   // Download image
   const downloadImage = () => {
     if (!canvasRef.current) return;
@@ -498,26 +519,47 @@ useEffect(() => {
   }, [image, resolution, maxColors]);
 
   return (
-    <div className="main-content">
-      <div className={`canvas-area ${image ? 'has-content' : ''}`}>
+    <div style={{ 
+      display: 'flex', 
+      gap: '20px', 
+      padding: '20px', 
+      minHeight: '100vh',
+      backgroundColor: '#1a1a1a',
+      color: '#f0f0f0',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {!image ? (
           <div 
-            className="upload-area"
+            style={{
+              width: '600px',
+              height: '400px',
+              border: '3px dashed rgba(255, 255, 255, 0.3)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              transition: 'all 0.3s ease'
+            }}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
           >
-            <p>Click to upload or drag and drop an image</p>
+            <p style={{ textAlign: 'center', opacity: 0.7 }}>Click to upload or drag and drop an image</p>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               onChange={handleFileUpload}
-              className="file-input"
+              style={{ display: 'none' }}
             />
           </div>
         ) : (
-          <div className="canvas-container">
+          <div style={{ textAlign: 'center' }}>
             <canvas
               ref={canvasRef}
               onClick={handleCanvasClick}
@@ -525,55 +567,70 @@ useEffect(() => {
                 imageRendering: 'pixelated',
                 cursor: 'crosshair',
                 border: '2px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                backgroundColor: '#000000'
               }}
             />
           </div>
         )}
       </div>
 
-      <div className="controls-panel">
-        <div className="control-group">
-          <h3>Resolution</h3>
-          <div className="slider">
+      <div style={{ 
+        width: '320px', 
+        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+        borderRadius: '12px', 
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px'
+      }}>
+        <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>Sock Designer</h2>
+        
+        <div>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '500', opacity: 0.8 }}>Resolution</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <input
               type="range"
               min="640"
               max="1024"
               value={resolution}
               onChange={(e) => setResolution(Number(e.target.value))}
+              style={{ flex: 1 }}
             />
-            <span>{resolution}px</span>
+            <span style={{ minWidth: '50px', textAlign: 'right', fontSize: '14px' }}>{resolution}px</span>
           </div>
         </div>
 
-        <div className="control-group">
-          <h3>Max Colors</h3>
-          <div className="slider">
+        <div>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '500', opacity: 0.8 }}>Max Colors</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <input
               type="range"
               min="3"
               max="7"
               value={maxColors}
               onChange={(e) => setMaxColors(Number(e.target.value))}
+              style={{ flex: 1 }}
             />
-            <span>{maxColors} colors</span>
+            <span style={{ minWidth: '50px', textAlign: 'right', fontSize: '14px' }}>{maxColors} colors</span>
           </div>
         </div>
 
         {colors.length > 0 && (
-          <div className="control-group">
-            <h3>Color Palette</h3>
+          <div>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '500', opacity: 0.8 }}>Color Palette</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '10px' }}>
               {colors.map((color, index) => (
                 <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                   <div
-                    className={`color-swatch ${selectedColor === color ? 'selected' : ''}`}
                     style={{ 
                       backgroundColor: color,
-                      position: 'relative',
                       width: '40px',
-                      height: '40px'
+                      height: '40px',
+                      borderRadius: '8px',
+                      border: selectedColor === color ? '3px solid #4a9eff' : '2px solid rgba(255, 255, 255, 0.3)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
                     }}
                     onClick={() => setSelectedColor(color)}
                   />
@@ -586,9 +643,10 @@ useEffect(() => {
                       height: '20px', 
                       border: 'none', 
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      opacity: 0.8
                     }}
-                    title={`Edit color`}
+                    title="Edit color"
                   />
                 </div>
               ))}
@@ -596,25 +654,91 @@ useEffect(() => {
           </div>
         )}
 
-        <div className="control-group">
-          <h3>Actions</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <h3 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '500', opacity: 0.8 }}>Actions</h3>
           <button
-            className="button"
             onClick={removeBackground}
             disabled={!pixelatedImage}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: pixelatedImage ? '#4a9eff' : '#333',
+              color: '#fff',
+              cursor: pixelatedImage ? 'pointer' : 'not-allowed',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Remove Background
           </button>
           <button
-            className="button"
+            onClick={copyToClipboard}
+            disabled={!pixelatedImage}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: pixelatedImage ? '#4a9eff' : '#333',
+              color: '#fff',
+              cursor: pixelatedImage ? 'pointer' : 'not-allowed',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            Copy to Clipboard
+          </button>
+          <button
             onClick={downloadImage}
             disabled={!pixelatedImage}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: pixelatedImage ? '#4a9eff' : '#333',
+              color: '#fff',
+              cursor: pixelatedImage ? 'pointer' : 'not-allowed',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Download PNG
           </button>
           <button
-            className="button"
             onClick={resetComponent}
+            style={{
+              padding: '10px 16px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '8px',
+              backgroundColor: 'transparent',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              transform: 'scale(1)'
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Reset
           </button>
