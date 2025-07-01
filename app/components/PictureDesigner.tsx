@@ -714,8 +714,25 @@ export default function PictureDesigner() {
     if (!canvasRef.current) return;
 
     try {
+      // Create a new canvas with scaled up dimensions to preserve pixelated look
+      const sourceCanvas = canvasRef.current;
+      const scaleFactor = 10; // Scale up to preserve sharp pixels
+      
+      const scaledCanvas = document.createElement('canvas');
+      scaledCanvas.width = sourceCanvas.width * scaleFactor;
+      scaledCanvas.height = sourceCanvas.height * scaleFactor;
+      
+      const scaledCtx = scaledCanvas.getContext('2d');
+      if (!scaledCtx) return;
+      
+      // Disable image smoothing to maintain pixelated appearance
+      scaledCtx.imageSmoothingEnabled = false;
+      
+      // Draw the scaled up image
+      scaledCtx.drawImage(sourceCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+      
       const blob = await new Promise<Blob>((resolve) => {
-        canvasRef.current!.toBlob((blob) => {
+        scaledCanvas.toBlob((blob) => {
           if (blob) resolve(blob);
         }, 'image/png');
       });
@@ -978,8 +995,12 @@ export default function PictureDesigner() {
               fontSize: '14px',
               fontWeight: '500',
               transition: 'all 0.2s ease',
-              opacity: pixelatedImage ? 1 : 0.5
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
             }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Copy to Clipboard
           </button>
@@ -996,8 +1017,12 @@ export default function PictureDesigner() {
               fontSize: '14px',
               fontWeight: '500',
               transition: 'all 0.2s ease',
-              opacity: pixelatedImage ? 1 : 0.5
+              opacity: pixelatedImage ? 1 : 0.5,
+              transform: 'scale(1)'
             }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             Download PNG
           </button>
