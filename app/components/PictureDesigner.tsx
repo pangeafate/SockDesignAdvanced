@@ -58,7 +58,7 @@ export default function PictureDesigner() {
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         undo();
       }
@@ -1018,7 +1018,7 @@ export default function PictureDesigner() {
             Reset
           </button>
           <p style={{ fontSize: '12px', opacity: 0.6, margin: '8px 0 0 0', textAlign: 'center' }}>
-            Tip: Use Ctrl+Z to undo
+            Tip: Use Ctrl+Z (Cmd+Z on Mac) to undo
           </p>
         </div>
       </div>
