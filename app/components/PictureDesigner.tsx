@@ -26,9 +26,47 @@ export default function PictureDesigner() {
   const [editingColorIndex, setEditingColorIndex] = useState<number | null>(null);
   const [useDithering, setUseDithering] = useState(true);
   const [enhanceEdges, setEnhanceEdges] = useState(true);
+  const [history, setHistory] = useState<ImageData[]>([]);
+  const historyIndexRef = useRef(-1);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Save current state to history
+  const saveToHistory = (imageData: ImageData) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndexRef.current + 1);
+      newHistory.push(imageData);
+      historyIndexRef.current = newHistory.length - 1;
+      return newHistory;
+    });
+  };
+
+  // Undo last action
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0 && canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+      
+      historyIndexRef.current -= 1;
+      const previousState = history[historyIndexRef.current];
+      ctx.putImageData(previousState, 0, 0);
+      setPixelatedImage(previousState);
+    }
+  }, [history]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [undo]);
 
   // Convert RGB to LAB color space for perceptual color matching
   const rgbToLab = (color: Color): LabColor => {
@@ -586,6 +624,13 @@ export default function PictureDesigner() {
   };
 
   const handleCanvasMouseUp = () => {
+    if (isDrawing && canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+        saveToHistory(imageData);
+      }
+    }
     setIsDrawing(false);
   };
 
@@ -593,8 +638,8 @@ export default function PictureDesigner() {
     setIsDrawing(false);
   };
 
-  // Remove background (make transparent)
-  const removeBackground = () => {
+  // Remove selected color (make transparent)
+  const removeSelectedColor = () => {
     if (!canvasRef.current || !pixelatedImage) return;
 
     const canvas = canvasRef.current;
@@ -604,33 +649,21 @@ export default function PictureDesigner() {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // Get corner colors as background colors
-    const backgroundColors = [
-      [data[0], data[1], data[2]], // Top-left
-      [data[(canvas.width - 1) * 4], data[(canvas.width - 1) * 4 + 1], data[(canvas.width - 1) * 4 + 2]], // Top-right
-      [data[(canvas.height - 1) * canvas.width * 4], data[(canvas.height - 1) * canvas.width * 4 + 1], data[(canvas.height - 1) * canvas.width * 4 + 2]], // Bottom-left
-    ];
+    // Convert selected hex color to RGB
+    const selectedR = parseInt(selectedColor.slice(1, 3), 16);
+    const selectedG = parseInt(selectedColor.slice(3, 5), 16);
+    const selectedB = parseInt(selectedColor.slice(5, 7), 16);
 
-    // Make similar colors transparent
+    // Make all pixels of the selected color transparent
     for (let i = 0; i < data.length; i += 4) {
-      const pixel = [data[i], data[i + 1], data[i + 2]];
-      
-      for (const bgColor of backgroundColors) {
-        const distance = Math.sqrt(
-          Math.pow(pixel[0] - bgColor[0], 2) +
-          Math.pow(pixel[1] - bgColor[1], 2) +
-          Math.pow(pixel[2] - bgColor[2], 2)
-        );
-        
-        if (distance < 50) { // Threshold for background detection
-          data[i + 3] = 0; // Make transparent
-          break;
-        }
+      if (data[i] === selectedR && data[i + 1] === selectedG && data[i + 2] === selectedB) {
+        data[i + 3] = 0; // Make transparent
       }
     }
 
     ctx.putImageData(imageData, 0, 0);
     setPixelatedImage(imageData);
+    saveToHistory(imageData);
   };
 
   // Update a color in the palette and reprocess image
@@ -673,6 +706,7 @@ export default function PictureDesigner() {
 
     ctx.putImageData(imageData, 0, 0);
     setPixelatedImage(imageData);
+    saveToHistory(imageData);
   };
 
   // Copy image to clipboard
@@ -718,6 +752,8 @@ export default function PictureDesigner() {
     setEditingColorIndex(null);
     setUseDithering(true);
     setEnhanceEdges(true);
+    setHistory([]);
+    historyIndexRef.current = -1;
     
     // Clear canvas
     if (canvasRef.current) {
@@ -727,6 +763,13 @@ export default function PictureDesigner() {
       }
     }
   };
+
+  // Save to history when pixelatedImage first becomes available
+  useEffect(() => {
+    if (pixelatedImage && historyIndexRef.current === -1) {
+      saveToHistory(pixelatedImage);
+    }
+  }, [pixelatedImage]);
 
   // Process image when parameters change
   useEffect(() => {
@@ -901,7 +944,7 @@ export default function PictureDesigner() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <h3 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '500', opacity: 0.8 }}>Actions</h3>
           <button
-            onClick={removeBackground}
+            onClick={removeSelectedColor}
             disabled={!pixelatedImage}
             style={{
               padding: '10px 16px',
@@ -920,7 +963,7 @@ export default function PictureDesigner() {
             onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
             onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            Remove Background
+            Remove Color
           </button>
           <button
             onClick={copyToClipboard}
@@ -974,6 +1017,9 @@ export default function PictureDesigner() {
           >
             Reset
           </button>
+          <p style={{ fontSize: '12px', opacity: 0.6, margin: '8px 0 0 0', textAlign: 'center' }}>
+            Tip: Use Ctrl+Z to undo
+          </p>
         </div>
       </div>
     </div>
